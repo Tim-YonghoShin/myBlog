@@ -1,0 +1,30 @@
+{
+  "name": "myblog-autopilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "티스토리 수익형 블로그 자동 운영 시스템",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:init": "node src/core/db.js --init",
+    "db:seed": "node scripts/seed-keywords.mjs",
+    "status": "node src/cli.js status",
+    "bot": "node src/telegram/bot.js",
+    "daemon": "node src/daemon.js",
+    "session:login": "node scripts/tistory-login.mjs",
+    "telegram:setup": "node scripts/setup-telegram.mjs",
+    "categories:plan": "node src/publish/sync-categories.js",
+    "categories:sync": "node src/publish/sync-categories.js --apply && node scripts/cache-categories.mjs",
+    "posts": "node scripts/tistory-posts.mjs list",
+    "pick": "node src/content/selector.js",
+    "check:google": "node scripts/check-google.mjs",
+    "rerender": "node scripts/rerender.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
+    "googleapis": "^178.0.0",
+    "playwright-core": "^1.62.1"
+  }
+}

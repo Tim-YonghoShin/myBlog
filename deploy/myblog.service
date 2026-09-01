@@ -1,0 +1,19 @@
+[Unit]
+Description=myBlog autopilot (Tistory 수익형 블로그 자동 운영)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/myBlog
+ExecStart=/usr/bin/node --no-warnings src/daemon.js
+Restart=always
+RestartSec=30
+Environment=NODE_ENV=production
+# OAuth 프로필을 쓰므로 API 키는 반드시 비워 둔다 (키가 설정되면 프로필을 덮어쓴다)
+UnsetEnvironment=ANTHROPIC_API_KEY
+StandardOutput=append:%h/workspace/myBlog/logs/daemon.log
+StandardError=append:%h/workspace/myBlog/logs/daemon.log
+
+[Install]
+WantedBy=default.target

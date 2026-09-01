@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+*.log
+.env
+logs/
+secrets/
+data/*.db
+data/*.db-*
+.session/
