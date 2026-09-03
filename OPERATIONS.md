@@ -146,10 +146,18 @@ gtag('config','G-XXXXXXXXXX', {
 `max-age=0` 때문에 `_ga` 쿠키가 저장되지 않고, **gtag 가 `/g/collect` 요청 자체를 보내지 않습니다.**
 브라우저 통제 실험으로 확인했습니다.
 
-| 설정 | /g/collect | _ga 쿠키 |
+**검증**: 5개 설정 × 3회 반복, 라운드마다 실행 순서를 무작위화. 결과가 100% 일관됩니다.
+
+| 설정 | `/g/collect` (3회) | 판정 |
 |---|---|---|
-| 플러그인 기본값 | 0건 | 0개 |
-| `cookie_flags` 제거 | 2건 | 2개 |
+| `cookie_flags:'max-age=0;domain=.tistory.com'` (플러그인 기본값) | 0 / 0 / 0 | ❌ |
+| `cookie_flags` 제거 | 1 / 1 / 1 | ✅ |
+| 옵션 없는 기본 설정 | 1 / 1 / 1 | ✅ |
+| `cookie_flags:'domain=.tistory.com'` (max-age 만 제거) | 1 / 1 / 1 | ✅ |
+| `cookie_flags:'max-age=0'` 단독 | 0 / 0 / 0 | ❌ |
+
+마지막 두 줄이 원인을 `max-age=0` 하나로 특정합니다. `domain=.tistory.com` 은 무해합니다.
+GA4 속성 설정(측정 ID·기본 URL·시간대)은 정상이며, 문제는 전적으로 페이지 쪽입니다.
 
 **조치** (약 2분, 티스토리 관리 화면에서 직접):
 
