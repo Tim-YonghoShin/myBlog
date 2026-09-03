@@ -85,6 +85,21 @@ export const TOOLS = [
     },
   },
   {
+    name: 'set_draft_hours',
+    description:
+      '초안 생성 시각을 바꾼다. 승인 버튼을 누르는 순간이 곧 발행이므로, 사용자가 깨어 있고 ' +
+      '티스토리 세션이 살아있는 시간대에 초안이 도착하도록 맞추는 데 쓴다. ' +
+      '데몬이 재시작된다(수 초). 빈 배열을 주면 자동 분산으로 되돌린다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        hours: { type: 'array', maxItems: 12, items: { type: 'integer', minimum: 0, maximum: 23 },
+                 description: '24시간제 시각 목록. 예: [9,13,17]' },
+      },
+      required: ['hours'], additionalProperties: false,
+    },
+  },
+  {
     name: 'set_paused',
     description: '자동 초안 생성을 멈추거나 재개한다.',
     input_schema: {
@@ -188,6 +203,7 @@ export async function runTool(name, input) {
       const r = readiness();
       const byStatus = db.prepare('SELECT status, COUNT(*) c FROM posts GROUP BY status').all();
       return JSON.stringify({
+        draftHours: getState('draft_hours', '') || '(자동 분산)',
         readiness: r.map((x) => ({ [x.label]: x.ok })),
         posts: Object.fromEntries(byStatus.map((x) => [x.status, x.c])),
         keywordsLeft: db.prepare("SELECT COUNT(*) c FROM keywords WHERE status='new'").get().c,
@@ -252,6 +268,19 @@ export async function runTool(name, input) {
       setState('posts_per_day', input.per_day);
       setTimeout(() => process.exit(0), 2500);   // systemd 가 새 스케줄로 재기동
       return `하루 ${input.per_day}편으로 변경했습니다. 적용을 위해 데몬을 재시작합니다(수 초 내 복귀).`;
+    }
+
+    case 'set_draft_hours': {
+      const hours = [...new Set((input.hours ?? []).filter((h) => Number.isInteger(h) && h >= 0 && h <= 23))]
+        .sort((a, b) => a - b);
+      setState('draft_hours', hours.join(','));
+      setTimeout(() => process.exit(0), 2500);
+      const perDay = Number(getState('posts_per_day', config.postsPerDay));
+      return hours.length
+        ? `초안 시각을 ${hours.join(', ')}시로 변경했습니다 (하루 ${perDay}편 설정).` +
+          (hours.length !== perDay ? ` 주의: 시각 ${hours.length}개와 편수 ${perDay}편이 다릅니다 — 시각 개수만큼 생성됩니다.` : '') +
+          ' 적용을 위해 데몬을 재시작합니다.'
+        : '자동 분산으로 되돌렸습니다. 데몬을 재시작합니다.';
     }
 
     case 'set_paused':

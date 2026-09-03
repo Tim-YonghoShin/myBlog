@@ -21,7 +21,9 @@ migrate();
 // 하루 발행 편수를 09~22시에 분산한다. 한 번에 몰아쓰면 사람이 쓴 리듬으로 보이지 않는다.
 // 발행 편수는 DB 의 posts_per_day 가 있으면 그걸 우선한다 (/rate 로 실시간 변경).
 const perDay = Number(getState('posts_per_day', config.postsPerDay));
-const draftHours = spreadHours(perDay).join(',');
+// 초안 시각은 기본적으로 09~22시 균등 분산이지만, 승인 가능한 시간대에 맞추기 위해
+// state.draft_hours 로 직접 지정할 수 있다. (예: '9,13,17' — 세션이 살아있는 낮 시간대)
+const draftHours = getState('draft_hours', '') || spreadHours(perDay).join(',');
 
 const jobs = [
   // 수집 → 리포트 순서가 되도록 시각을 배치한다

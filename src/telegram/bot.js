@@ -31,6 +31,7 @@ const HELP = `<b>블로그 자동 운영 봇</b>
 /categories — 카테고리 현황·제안
 /catwatch — 카테고리 점검 (승인 버튼)
 /rate [n] — 하루 발행 편수 확인·변경
+/hours [시각] — 초안 생성 시각 확인·변경 (예: 9,13,17)
 /login — 티스토리 재로그인 (QR 코드를 보냅니다)
 /health — 세션·인증 점검
 /pause — 자동 발행 일시정지
@@ -112,6 +113,29 @@ const handlers = {
     const { clearHistory } = await import('./agent.js');
     clearHistory();
     return '대화 기록을 지웠습니다. 다음 메시지부터 새로 시작합니다.';
+  },
+
+  // 초안 시각 변경. 승인 가능한 시간대(세션이 살아있는 낮)에 맞추기 위해 필요하다.
+  '/hours': async (arg) => {
+    const cur = getState('draft_hours', '') || '(자동 분산)';
+    if (!arg) return `현재 초안 시각: <b>${esc(cur)}</b>시\n변경: <code>/hours 9,13,17</code>\n자동 분산으로 되돌리기: <code>/hours auto</code>`;
+    if (arg.trim() === 'auto') {
+      setState('draft_hours', '');
+      await send('초안 시각을 자동 분산으로 되돌립니다. 재시작합니다…');
+      setTimeout(() => process.exit(0), 1200);
+      return null;
+    }
+    const hours = arg.split(/[,\s]+/).map((h) => Number(h.trim())).filter((h) => Number.isInteger(h) && h >= 0 && h <= 23);
+    if (!hours.length) return '0~23 사이 숫자를 쉼표로 지정하세요. 예: <code>/hours 9,13,17</code>';
+    const perDay = Number(getState('posts_per_day', config.postsPerDay));
+    setState('draft_hours', [...new Set(hours)].sort((a, b) => a - b).join(','));
+    await send(
+      `초안 시각을 <b>${esc(getState('draft_hours'))}</b>시로 변경합니다.\n` +
+      (hours.length !== perDay ? `⚠️ 하루 발행 편수(${perDay}편)와 시각 개수(${hours.length}개)가 다릅니다. 시각 개수만큼 생성됩니다.\n` : '') +
+      '적용을 위해 재시작합니다…'
+    );
+    setTimeout(() => process.exit(0), 1200);
+    return null;
   },
 
   '/pause': () => { setState('paused', '1'); return '⏸ 자동 발행을 정지했습니다. <code>/resume</code> 으로 재개합니다.'; },
@@ -340,6 +364,19 @@ async function handleCallback(cb) {
   } catch (e) {
     log.error(`승인 처리 실패 ${action} id=${idStr}`, e);
     await answer(cb.id, '오류가 났습니다');
+
+    // 세션 만료라면 사람이 할 일은 로그인뿐이다. QR 을 바로 보내고 글은 승인대기로 되돌린다.
+    const { isSessionError } = await import('../publish/tistory-api.js');
+    if (post && isSessionError(e)) {
+      db.prepare("UPDATE posts SET status='review' WHERE id=?").run(postId);
+      await send(
+        `🔑 <b>세션 만료로 발행하지 못했습니다</b>\n<b>${esc(post.title)}</b>\n\n` +
+        `QR 로 로그인한 뒤 <code>/pending</code> 에서 다시 승인해 주세요. 글은 그대로 보관돼 있습니다.`
+      );
+      const { qrLogin } = await import('../../scripts/tistory-login-qr.mjs');
+      await qrLogin({ notify: true }).catch(() => {});
+      return;
+    }
     await send(`⚠️ ${esc(action)} 처리 실패${post ? `\n<b>${esc(post.title)}</b>` : ''}\n<code>${esc(e.message)}</code>`);
   }
 }

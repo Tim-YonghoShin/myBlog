@@ -82,3 +82,22 @@ export function flatten(categories, depth = 1, parent = 0) {
 }
 
 export const findByName = (flat, name) => flat.find((c) => c.name === name);
+
+/** 세션이 아직 유효한지 가볍게 확인한다. 발행 직전·승인 요청 직전에 쓴다. */
+export async function sessionAlive() {
+  if (!existsSync(config.tistory.sessionPath)) return false;
+  try {
+    return await withSession(async (ctx) => {
+      const res = await ctx.request.get(`${base()}/manage/category.json`);
+      if (!res.ok()) return false;
+      const t = await res.text();
+      return !/auth\/login|kakao/i.test(t) && t.trim().startsWith('{');
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** 세션 만료로 인한 오류인지 판별 */
+export const isSessionError = (e) =>
+  /세션이 만료|auth\/login|HTTP 40[13]|로그인/i.test(String(e?.message ?? e));

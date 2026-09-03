@@ -72,7 +72,23 @@ export async function createDraft({ keyword, category, type = 'info', notify = t
     return { postId, draft, quality, approved: false };
   }
 
-  if (notify) await requestApproval({ postId, draft, quality });
+  if (notify) {
+    // 승인 버튼을 누르는 순간이 곧 발행이다. 그때 세션이 죽어 있으면 헛걸음이 되므로
+    // 승인 요청보다 QR 을 먼저 보내 사용자가 한 번에 처리할 수 있게 한다.
+    try {
+      const { sessionAlive } = await import('../publish/tistory-api.js');
+      if (!(await sessionAlive())) {
+        log.warn('세션 만료 감지 — 승인 요청 전에 QR 을 먼저 보냅니다');
+        const { send } = await import('../telegram/client.js');
+        await send('🔑 티스토리 세션이 만료됐습니다. 아래 QR 로 먼저 로그인해 주세요.\n로그인 후 이어서 승인 요청이 도착합니다.');
+        const { qrLogin } = await import('../../scripts/tistory-login-qr.mjs');
+        await qrLogin({ notify: true }).catch(() => {});
+      }
+    } catch (e) {
+      log.error('세션 사전 점검 실패', e);
+    }
+    await requestApproval({ postId, draft, quality });
+  }
   return { postId, draft, quality };
 }
 
