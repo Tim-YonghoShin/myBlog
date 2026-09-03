@@ -133,6 +133,48 @@ export const TOOLS = [
     },
   },
   {
+    name: 'revise_post',
+    description:
+      '이미 발행됐거나 승인 대기 중인 글을 지시대로 고치고 티스토리에 반영한다. ' +
+      '"이 글 이렇게 고쳐줘" 같은 요청에 쓴다. 발행된 글은 같은 URL 이 유지된다. ' +
+      '되돌리기 어려우므로 무엇을 어떻게 고칠지 사용자에게 먼저 알리고 동의를 받으시오. 1~2분 걸린다.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        post_id: { type: 'integer' },
+        instruction: { type: 'string', description: '무엇을 어떻게 고칠지. 구체적으로.' },
+        allow_title: { type: 'boolean', description: '제목도 함께 다듬어도 되면 true' },
+        confirm: { type: 'boolean', description: '사용자가 수정에 동의했으면 true' },
+      },
+      required: ['post_id', 'instruction', 'confirm'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'add_guideline',
+    description:
+      '앞으로 쓰는 모든 글에 적용될 지침을 추가한다. "앞으로는 ~하게 써줘" 같은 요청에 쓴다. ' +
+      '이 지침은 생성 프롬프트에 영구적으로 들어간다. 이미 발행된 글에는 소급되지 않는다.',
+    input_schema: {
+      type: 'object',
+      properties: { text: { type: 'string', description: '한 문장으로 명확하게' } },
+      required: ['text'], additionalProperties: false,
+    },
+  },
+  {
+    name: 'list_guidelines',
+    description: '현재 적용 중인 글쓰기 지침 목록을 반환한다.',
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'remove_guideline',
+    description: '지침을 번호로 삭제한다. 번호는 list_guidelines 의 순서(0부터).',
+    input_schema: {
+      type: 'object',
+      properties: { index: { type: 'integer', minimum: 0 } },
+      required: ['index'], additionalProperties: false,
+    },
+  },
+  {
     name: 'health_check',
     description: '티스토리 세션·Anthropic 인증·Google API 상태를 점검한다.',
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
@@ -247,6 +289,34 @@ export async function runTool(name, input) {
       const text = textOf(readFileSync(post.html_path, 'utf8'));
       return JSON.stringify({ title: post.title, status: post.status, url: post.url, chars: text.length,
         text: text.slice(0, input.max_chars ?? 2500) });
+    }
+
+    case 'revise_post': {
+      if (!input.confirm) return '거부: 사용자 확인 없이는 수정하지 않습니다. 먼저 무엇을 고칠지 알리고 동의를 받으시오.';
+      const { revisePost } = await import('../content/revise.js');
+      const r = await revisePost(input.post_id, input.instruction, { allowTitle: input.allow_title === true });
+      return r.updated
+        ? `수정 완료 (품질 ${r.quality.score}점, 본문 ${r.quality.chars}자)${r.titleChanged ? `\n새 제목: ${r.title}` : ''} — ${r.url}`
+        : `초안을 수정했습니다 (품질 ${r.quality.score}점). 아직 발행 전이라 티스토리에는 반영되지 않았습니다.`;
+    }
+
+    case 'add_guideline': {
+      const { addGuideline } = await import('../content/revise.js');
+      const list = addGuideline(input.text);
+      return `지침 등록 완료. 현재 ${list.length}개가 앞으로 쓰는 모든 글에 적용됩니다.\n` +
+             list.map((g, i) => `${i}. ${g.text}`).join('\n');
+    }
+
+    case 'list_guidelines': {
+      const { getGuidelines } = await import('../content/revise.js');
+      const list = getGuidelines();
+      return list.length ? list.map((g, i) => `${i}. ${g.text} (${g.added_at})`).join('\n') : '(등록된 지침 없음)';
+    }
+
+    case 'remove_guideline': {
+      const { removeGuideline } = await import('../content/revise.js');
+      const r = removeGuideline(input.index);
+      return r ? `삭제됨: ${r.text}` : '해당 번호의 지침이 없습니다.';
     }
 
     case 'health_check': {

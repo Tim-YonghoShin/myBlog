@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../core/config.js';
 import { createLogger } from '../core/logger.js';
 import { SYSTEM, userMessage, domainsFor } from './prompt.js';
+import { guidelineBlock } from './revise.js';
 
 const log = createLogger('generate');
 
@@ -56,7 +57,11 @@ export async function generateDraft({ keyword, category, type = 'info', today })
     thinking: { type: 'adaptive' },
     output_config: { effort: 'high' },
     // 시스템 프롬프트는 고정이라 캐시가 걸린다. 동적 값은 전부 user 메시지에 있다.
-    system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+    // 고정 규칙은 캐시하고, 누적 지침은 그 뒤에 붙인다 (지침이 바뀌어도 앞부분 캐시는 유지).
+    system: [
+      { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
+      ...(guidelineBlock() ? [{ type: 'text', text: guidelineBlock() }] : []),
+    ],
     tools: [
       {
         type: 'web_search_20260209',

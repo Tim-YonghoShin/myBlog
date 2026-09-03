@@ -29,7 +29,7 @@ export async function runChecks() {
         const flat = flatten((await getCategories(ctx)).categories);
         return `카테고리 ${flat.length}개`;
       });
-    }, 'npm run session:login'),
+    }, '/login (텔레그램에서 QR 로그인)'),
 
     // Anthropic OAuth — 만료되면 초안 생성이 멈춘다
     check('Anthropic OAuth', async () => {
@@ -40,6 +40,14 @@ export async function runChecks() {
       });
       return r.model;
     }, 'ant auth login'),
+
+    // GA4 실제 수집 — 플러그인 설정 때문에 조용히 0 이 되는 사고가 있었다
+    check('GA4 수집', async () => {
+      const { verifyGA4 } = await import('./ga-check.js');
+      const r = await verifyGA4();
+      if (!r.ok) throw new Error(r.reason ?? '히트가 나가지 않습니다');
+      return `히트 ${r.collect}건 · ${r.measurementId}`;
+    }, '티스토리 GA 플러그인을 끄고 스킨에 gtag 직접 삽입 (OPERATIONS.md 참고)'),
 
     // Google API — 만료되면 리포트가 빈다
     check('Google API', async () => {
@@ -71,6 +79,14 @@ export const runHealth = () =>
       for (const f of failed) t += `❌ <b>${esc(f.name)}</b>\n   ${esc(f.detail)}\n   → <code>${esc(f.fixHint)}</code>\n\n`;
       t += `조치 전까지 해당 기능이 멈춥니다.`;
       await send(t);
+
+      // 티스토리 세션 만료는 QR 로 바로 복구할 수 있다. 사람 손이 덜 가게 즉시 보낸다.
+      if (failed.some((f) => f.name === '티스토리 세션')) {
+        try {
+          const { qrLogin } = await import('../../scripts/tistory-login-qr.mjs');
+          await qrLogin({ notify: true });
+        } catch { /* 실패 알림은 qrLogin 이 보낸다 */ }
+      }
     } else if (!failed.length && prev) {
       await send('✅ <b>복구됨</b> — 모든 점검을 통과했습니다.');
     }

@@ -20,7 +20,8 @@
     "posts": "node scripts/tistory-posts.mjs list",
     "pick": "node src/content/selector.js",
     "check:google": "node scripts/check-google.mjs",
-    "rerender": "node scripts/rerender.mjs"
+    "rerender": "node scripts/rerender.mjs",
+    "session:qr": "node scripts/tistory-login-qr.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

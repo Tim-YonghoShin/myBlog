@@ -7,7 +7,7 @@
 
 import '../src/core/net.js';
 import { chromium } from 'playwright-core';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../src/core/config.js';
 import { createLogger } from '../src/core/logger.js';
@@ -20,6 +20,19 @@ const BLOG = config.tistory.blogUrl;
 if (!BLOG || BLOG.includes('example')) {
   console.error('.env 의 TISTORY_BLOG_URL 이 설정되지 않았습니다.');
   process.exit(1);
+}
+
+// 원격 세션(SSH·Remote Control)에는 DISPLAY 가 없다. 물리 그래픽 세션이 살아 있으면 그쪽에 띄운다.
+if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+  if (existsSync('/tmp/.X11-unix/X0')) {
+    process.env.DISPLAY = ':0';
+    console.log('※ 이 셸에 DISPLAY 가 없어 :0 (본체 화면)으로 띄웁니다.');
+    console.log('  브라우저 창은 서버 본체 모니터에 나타납니다.\n');
+  } else {
+    console.error('그래픽 환경이 없어 로그인 창을 띄울 수 없습니다.');
+    console.error('본체에서 직접 실행하거나, X 포워딩(ssh -X)으로 접속한 뒤 다시 실행하세요.');
+    process.exit(1);
+  }
 }
 
 mkdirSync(PROFILE, { recursive: true });

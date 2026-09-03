@@ -3,7 +3,7 @@
 // 스톡 이미지는 저작권·적합성 문제가 있고 글과 무관하다. 대신 글이 실제로 담은 수치를
 // 카드로 만들면 내용과 100% 일치하고, 저작권 문제가 없으며, 공유 시 썸네일로도 쓰인다.
 // 티스토리가 인라인 SVG 를 보존하는 것을 확인해 업로드 없이 삽입한다.
-import { PALETTE } from './style.js';
+import { PALETTES, DEFAULT_PALETTE } from './palettes.js';
 
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -55,22 +55,21 @@ const FONT = "'Pretendard','Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',
 /**
  * 요약 카드 SVG 를 만든다. viewBox 기반이라 폭에 맞춰 자동으로 늘어난다.
  */
-export function summaryCard({ title, pairs, today, blogName = '' }) {
+export function summaryCard({ title, pairs, today, blogName = '', palette = DEFAULT_PALETTE }) {
   if (!pairs?.length) return '';
+  const PALETTE = PALETTES[palette] ?? PALETTES[DEFAULT_PALETTE];
   const W = 860, PAD = 36;
-  const LABEL_W = 190;                       // 라벨 열 폭(px)
+  const LABEL_W = 190;
   const VALUE_X = PAD + LABEL_W;
   const VALUE_FS = 18;
-  const VALUE_UNITS = (W - VALUE_X - PAD) / VALUE_FS;   // 값 열에 들어가는 글자 수
+  const VALUE_UNITS = (W - VALUE_X - PAD) / VALUE_FS;
 
-  // ── 헤더: 아이브로우 → 제목 순서 (겹치지 않게 위아래로 배치)
   const titleLines = wrap(title, 25, 2);
   const TITLE_FS = 30, TITLE_LH = 40;
   const headH = 30 + 22 + titleLines.length * TITLE_LH + 22;
   const eyebrowY = 40;
   const titleY0 = eyebrowY + 40;
 
-  // ── 본문: 값이 길면 두 줄까지 허용하고 행 높이를 늘린다
   const LINE_H = 27;
   const laid = pairs.map((p) => {
     const valueLines = wrap(p.value, VALUE_UNITS, 2);
@@ -80,17 +79,19 @@ export function summaryCard({ title, pairs, today, blogName = '' }) {
   const footH = 46;
   const H = headH + bodyH + footH;
 
-  let y = headH;
+  // 다크모드 대응: 본문 글자는 currentColor 로 스킨 색을 상속받고,
+  // 배경·구분선은 반투명이라 밝은/어두운 배경 모두에서 자연스럽다.
+  // 헤더 띠만 배경·글자를 함께 고정한다 (어느 테마에서도 동일하게 읽힘).
   const rows = laid.map((r, i) => {
-    const top = y; y += r.h;
-    const bg = i % 2 === 1 ? `<rect x="0" y="${top}" width="${W}" height="${r.h}" fill="${PALETTE.zebra}"/>` : '';
+    const y = headH + laid.slice(0, i).reduce((a, x) => a + x.h, 0);
+    const bg = i % 2 === 1 ? `<rect x="0" y="${y}" width="${W}" height="${r.h}" fill="${PALETTE.zebra}"/>` : '';
     const values = r.valueLines.map((l, j) =>
-      `<text x="${VALUE_X}" y="${top + 30 + j * LINE_H}" font-family="${FONT}" font-size="${VALUE_FS}" fill="${PALETTE.text}">${esc(l)}</text>`
+      `<text x="${VALUE_X}" y="${y + 30 + j * LINE_H}" font-family="${FONT}" font-size="${VALUE_FS}" fill="currentColor">${esc(l)}</text>`
     ).join('\n    ');
     return `${bg}
-    <text x="${PAD}" y="${top + 30}" font-family="${FONT}" font-size="17" font-weight="700" fill="${PALETTE.muted}">${esc(r.label)}</text>
+    <text x="${PAD}" y="${y + 30}" font-family="${FONT}" font-size="17" font-weight="700" fill="currentColor" opacity="0.72">${esc(r.label)}</text>
     ${values}
-    <line x1="0" y1="${top + r.h}" x2="${W}" y2="${top + r.h}" stroke="${PALETTE.border}" stroke-width="1"/>`;
+    <line x1="0" y1="${y + r.h}" x2="${W}" y2="${y + r.h}" stroke="${PALETTE.border}" stroke-width="1"/>`;
   }).join('\n');
 
   const titleTspans = titleLines.map((l, i) =>
@@ -98,11 +99,10 @@ export function summaryCard({ title, pairs, today, blogName = '' }) {
   ).join('\n  ');
 
   return `<p style="margin:8px 0 30px;max-width:100%;min-width:0;overflow:hidden;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(title)} 요약" style="display:block;width:100%;max-width:100%;height:auto;border-radius:10px;border:1px solid ${PALETTE.border};">
-  <rect width="${W}" height="${H}" fill="#ffffff"/>
   <rect width="${W}" height="${headH}" fill="${PALETTE.headBg}"/>
-  <text x="${PAD}" y="${eyebrowY}" font-family="${FONT}" font-size="14" font-weight="600" letter-spacing="2" fill="#a5b4fc">한눈에 보기</text>
   ${titleTspans}
+  <text x="${PAD}" y="${eyebrowY}" font-family="${FONT}" font-size="14" font-weight="600" letter-spacing="2" fill="#bfdbfe">한눈에 보기</text>
   ${rows}
-  <text x="${PAD}" y="${H - 16}" font-family="${FONT}" font-size="13" fill="${PALETTE.muted}">기준일 ${esc(today)}${blogName ? ` · ${esc(blogName)}` : ''}</text>
+  <text x="${PAD}" y="${H - 16}" font-family="${FONT}" font-size="13" fill="currentColor" opacity="0.6">기준일 ${esc(today)}${blogName ? ` · ${esc(blogName)}` : ''}</text>
 </svg></p>`;
 }

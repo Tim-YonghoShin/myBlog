@@ -57,6 +57,24 @@ export async function edit(messageId, text, { buttons, chatId } = {}) {
 export const answer = (callbackQueryId, text) =>
   call('answerCallbackQuery', { callback_query_id: callbackQueryId, text, show_alert: false });
 
+/** 사진 전송 (QR 로그인 등). 파일을 multipart 로 올린다. */
+export async function sendPhoto(filePath, caption = '', { chatId } = {}) {
+  const { readFile } = await import('node:fs/promises');
+  const { basename } = await import('node:path');
+  const form = new FormData();
+  form.append('chat_id', String(chatId ?? config.telegram.chatId));
+  if (caption) { form.append('caption', caption.slice(0, 1024)); form.append('parse_mode', 'HTML'); }
+  form.append('photo', new Blob([await readFile(filePath)]), basename(filePath));
+  const res = await fetchRetry(`${base()}/sendPhoto`, { method: 'POST', body: form, timeoutMs: 60_000 });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendPhoto: ${json.description}`);
+  return json.result;
+}
+
+/** 메시지 삭제 (만료된 QR 정리용) */
+export const remove = (messageId, { chatId } = {}) =>
+  call('deleteMessage', { chat_id: chatId ?? config.telegram.chatId, message_id: messageId }).catch(() => null);
+
 /** 텔레그램 메시지 상한은 4096자. 넘치면 잘라서 여러 통으로 보낸다. */
 export async function sendLong(text, opts = {}) {
   const LIMIT = 3900;

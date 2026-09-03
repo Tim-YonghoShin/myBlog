@@ -130,16 +130,62 @@ Claude Opus 5 + web_search 8회 기준, 실측 **초안 1편당 $0.43** (2,500�
 
 시스템 프롬프트에 캐시가 걸려 있어 연속 생성 시 입력 비용이 줄어듭니다.
 
+## ⚠️ GA4 가 데이터를 수집하지 않는 문제 (미해결 — 수동 조치 필요)
+
+**증상**: 티스토리 방문자 카운터는 올라가는데 GA4·리포트는 계속 0.
+
+**원인**: 티스토리 「구글 애널리틱스」 플러그인이 아래를 삽입합니다.
+
+```js
+gtag('config','G-XXXXXXXXXX', {
+    cookie_flags: 'max-age=0;domain=.tistory.com',   // ← 쿠키를 즉시 만료시킴
+    ...
+});
+```
+
+`max-age=0` 때문에 `_ga` 쿠키가 저장되지 않고, **gtag 가 `/g/collect` 요청 자체를 보내지 않습니다.**
+브라우저 통제 실험으로 확인했습니다.
+
+| 설정 | /g/collect | _ga 쿠키 |
+|---|---|---|
+| 플러그인 기본값 | 0건 | 0개 |
+| `cookie_flags` 제거 | 2건 | 2개 |
+
+**조치** (약 2분, 티스토리 관리 화면에서 직접):
+
+1. 블로그 관리 → **플러그인** → 「구글 애널리틱스」 → **사용 해제**
+2. 블로그 관리 → 꾸미기 → **스킨 편집** → 우측 상단 **html 편집**
+3. `</head>` **바로 위**에 아래를 붙여넣고 **적용**
+
+```html
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-7ZHGT5GNSW"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-7ZHGT5GNSW');
+</script>
+```
+
+4. 확인:
+
+```bash
+node src/core/ga-check.js     # "✅ GA4 정상 수집" 이 나와야 함
+```
+
+> 스킨을 변경하면 이 코드가 사라집니다. 스킨 교체 후에는 다시 넣고 위 명령으로 확인하세요.
+> 매일 23시 헬스체크가 이 상태를 감시하며, 수집이 멈추면 텔레그램으로 알립니다.
+
 ## 자주 나는 문제
 
-| 증상 | 원인 | 조치 |
-|---|---|---|
-| 발행 시 "세션이 만료되었습니다" | 카카오 세션 만료 | `npm run session:login` |
-| 초안 생성 401/403 | OAuth 만료 | `ant auth login` |
+| 증상                       | 원인                       | 조치                                      |
+| ------------------------ | ------------------------ | --------------------------------------- |
+| 발행 시 "세션이 만료되었습니다"       | 카카오 세션 만료                | `npm run session:login`                 |
+| 초안 생성 401/403            | OAuth 만료                 | `ant auth login`                        |
 | `fetch failed ETIMEDOUT` | Node happy-eyeballs 타임아웃 | `src/core/net.js` 가 이미 처리. import 누락 확인 |
-| 품질 게이트 반복 실패 | 키워드가 공식 출처로 확인 불가 | `/retry` 또는 글감 교체 |
-| 카테고리 지정 실패 | 티스토리에서 카테고리 이름 변경됨 | `npm run categories:sync` |
-| 티스토리 발행 500 | 하루 공개 발행 한도(30편) 초과 | 다음날 재시도 |
+| 품질 게이트 반복 실패             | 키워드가 공식 출처로 확인 불가        | `/retry` 또는 글감 교체                       |
+| 카테고리 지정 실패               | 티스토리에서 카테고리 이름 변경됨       | `npm run categories:sync`               |
+| 티스토리 발행 500              | 하루 공개 발행 한도(30편) 초과      | 다음날 재시도                                 |
 
 ## 백업
 

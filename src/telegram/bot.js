@@ -31,6 +31,7 @@ const HELP = `<b>블로그 자동 운영 봇</b>
 /categories — 카테고리 현황·제안
 /catwatch — 카테고리 점검 (승인 버튼)
 /rate [n] — 하루 발행 편수 확인·변경
+/login — 티스토리 재로그인 (QR 코드를 보냅니다)
 /health — 세션·인증 점검
 /pause — 자동 발행 일시정지
 /resume — 자동 발행 재개
@@ -174,6 +175,12 @@ const handlers = {
       .then((r) => { if (r === 'no findings' || r === 'unchanged') send('추가가 필요한 카테고리가 없습니다.'); })
       .catch((e) => send(`⚠️ 실패\n<code>${esc(e.message)}</code>`));
     return '점검 중…';
+  },
+
+  '/login': () => {
+    import('../../scripts/tistory-login-qr.mjs').then(({ qrLogin }) => qrLogin({ notify: true }))
+      .catch(() => {});   // 실패 알림은 qrLogin 내부에서 보낸다
+    return '카카오 QR 코드를 준비합니다… 잠시 후 이미지가 도착합니다.';
   },
 
   '/health': () => {

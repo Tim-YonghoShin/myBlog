@@ -4,13 +4,20 @@
 
 const OFFICIAL_TLD = /\.(go\.kr|or\.kr|gov\.kr)(\/|$)/;
 
-/** AI 생성 글에서 반복적으로 나오는 상투어. 하나라도 있으면 실패. */
+/**
+ * 내용이 없는 상투어. 하나라도 있으면 실패.
+ * 친근한 도입("~하게 되죠", "저도 처음엔")은 상투어가 아니므로 막지 않는다.
+ * '오늘은' 같은 표현도 뒤에 구체적인 내용이 오면 자연스러우므로 뺐다.
+ */
 const BANNED_PHRASES = [
   '안녕하세요', '여러분', '알아보겠습니다', '알아볼까요', '살펴보겠습니다',
   '도움이 되셨', '도움이 되길', '그럼 이만', '마무리하겠습니다',
-  '오늘은', '이번 시간에는', '포스팅을 준비했', '함께 보시죠',
+  '이번 시간에는', '포스팅을 준비했', '함께 보시죠',
   '꼭 알아두세요', '놓치지 마세요', '충격적', '놀랍게도', '반드시 확인하세요!',
 ];
+
+/** 제목이 정보량을 약속하는 형태인지 (검색 클릭률과 직결) */
+const TITLE_HOOKS = /총정리|정리|하는 법|하는법|끝내는|완벽|한 번에|한번에|방법/;
 
 /** 법적 리스크 표현. 보험업법·자본시장법. */
 const LEGAL_RISK = [
@@ -20,7 +27,8 @@ const LEGAL_RISK = [
   { re: /무조건\s?(받을\s?수\s?있|가능합니다|됩니다)/,                          why: '근거 없는 단정' },
 ];
 
-const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu;
+const MAX_EMOJI = 3;
 
 /** HTML 에서 순수 텍스트만 뽑는다 (글자 수 계산용). */
 export const textOf = (html) =>
@@ -32,7 +40,7 @@ export const textOf = (html) =>
       .replace(/\s+/g, ' ')
       .trim();
 
-export function checkDraft(draft, { minChars = 1500, maxChars = 4000, minSources = 3 } = {}) {
+export function checkDraft(draft, { minChars = 1500, maxChars = 4800, minSources = 3 } = {}) {
   const issues = [];
   const add = (level, code, msg) => issues.push({ level, code, msg });
 
@@ -62,7 +70,8 @@ export function checkDraft(draft, { minChars = 1500, maxChars = 4000, minSources
   // ── 금지 표현
   const hits = BANNED_PHRASES.filter((p) => text.includes(p));
   if (hits.length) add('error', 'banned_phrase', `상투어 발견: ${hits.join(', ')}`);
-  if (EMOJI.test(text)) add('error', 'emoji', '본문에 이모지가 있습니다');
+  const emojiCount = (text.match(EMOJI) ?? []).length;
+  if (emojiCount > MAX_EMOJI) add('error', 'emoji', `이모지 ${emojiCount}개 — ${MAX_EMOJI}개까지만 허용`);
 
   // ── 법적 리스크
   for (const { re, why } of LEGAL_RISK) if (re.test(text)) add('error', 'legal_risk', `${why}`);
@@ -71,9 +80,19 @@ export function checkDraft(draft, { minChars = 1500, maxChars = 4000, minSources
   if (/<script|<style|javascript:|onerror=|onclick=/i.test(html)) add('error', 'unsafe_html', '허용되지 않는 HTML');
   if (/<h1[\s>]/i.test(html)) add('warn', 'h1_used', 'h1 은 티스토리가 제목에 씁니다');
 
+  // ── 문체 — 해요체가 기본이어야 한다 (보고서 말투는 블로그에서 겉돈다)
+  const politeHae = (text.match(/(?:해요|어요|아요|더라고요|볼게요|드릴게요|거예요|예요|이에요)[.!?\s]/g) ?? []).length;
+  const formal = (text.match(/(?:합니다|입니다|습니다|하십시오)[.!?\s]/g) ?? []).length;
+  if (formal > 0 && politeHae / (politeHae + formal) < 0.35) {
+    add('warn', 'tone_formal', `딱딱한 말투 비중이 높습니다 (해요체 ${politeHae} / 합니다체 ${formal})`);
+  }
+
   // ── 메타
   if (!draft.title) add('error', 'no_title', '제목이 없습니다');
-  else if (draft.title.length > 40) add('warn', 'long_title', `제목 ${draft.title.length}자 — 검색결과에서 잘립니다`);
+  else {
+    if (draft.title.length > 40) add('warn', 'long_title', `제목 ${draft.title.length}자 — 검색결과에서 잘립니다`);
+    if (!TITLE_HOOKS.test(draft.title)) add('warn', 'title_weak', '제목에 정보량을 약속하는 표현(총정리·~하는 법 등)이 없습니다');
+  }
   if ((draft.tags ?? []).length < 3) add('warn', 'few_tags', `태그 ${(draft.tags ?? []).length}개 — 5개 이상 권장`);
 
   // ── 반복 문장 (분량 채우기 탐지)

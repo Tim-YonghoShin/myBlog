@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // 스타일·렌더 규칙이 바뀌었을 때 기존 글을 최신 형식으로 다시 만든다.
 //   node scripts/rerender.mjs              대기 중인 초안만 (승인 시 최신본이 나감)
-//   node scripts/rerender.mjs --published  이미 발행된 글까지 티스토리에 재반영
+//   node scripts/rerender.mjs --all        발행글 포함해 로컬 파일만 갱신 (티스토리 미반영)
+//   node scripts/rerender.mjs --published  발행글까지 티스토리에 재반영 (세션 필요)
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { db } from '../src/core/db.js';
 import { config } from '../src/core/config.js';
@@ -10,8 +11,9 @@ import { publish } from '../src/publish/publisher.js';
 import { withSession } from '../src/publish/tistory-api.js';
 
 const alsoPublished = process.argv.includes('--published');
+const includeAll = alsoPublished || process.argv.includes('--all');
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: config.tz });
-const statuses = alsoPublished ? ['review', 'draft', 'published'] : ['review', 'draft'];
+const statuses = includeAll ? ['review', 'draft', 'published'] : ['review', 'draft'];
 
 const rows = db.prepare(
   `SELECT * FROM posts WHERE status IN (${statuses.map(() => '?').join(',')})`
