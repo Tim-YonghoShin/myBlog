@@ -58,12 +58,13 @@ export const answer = (callbackQueryId, text) =>
   call('answerCallbackQuery', { callback_query_id: callbackQueryId, text, show_alert: false });
 
 /** 사진 전송 (QR 로그인 등). 파일을 multipart 로 올린다. */
-export async function sendPhoto(filePath, caption = '', { chatId } = {}) {
+export async function sendPhoto(filePath, caption = '', { chatId, buttons } = {}) {
   const { readFile } = await import('node:fs/promises');
   const { basename } = await import('node:path');
   const form = new FormData();
   form.append('chat_id', String(chatId ?? config.telegram.chatId));
   if (caption) { form.append('caption', caption.slice(0, 1024)); form.append('parse_mode', 'HTML'); }
+  if (buttons) form.append('reply_markup', JSON.stringify({ inline_keyboard: buttons }));
   form.append('photo', new Blob([await readFile(filePath)]), basename(filePath));
   const res = await fetchRetry(`${base()}/sendPhoto`, { method: 'POST', body: form, timeoutMs: 60_000 });
   const json = await res.json();

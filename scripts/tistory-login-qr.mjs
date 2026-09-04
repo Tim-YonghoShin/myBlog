@@ -24,6 +24,35 @@ const ROUND_MS = 4.5 * 60_000; // QR 유효시간 5분보다 조금 짧게
 
 mkdirSync(dirname(STATE), { recursive: true });
 
+// [시도했다가 버린 방법] QR 은 https://auth.kakao.com/qr_login/confirm?token=... 링크를 담고 있어서
+// 그 링크를 텔레그램 버튼으로 보내면 스캔 없이 승인될 것처럼 보인다. 실제로는 동작하지 않는다.
+// 카카오가 토큰을 QR 을 생성한 브라우저의 세션·IP 에 묶어두기 때문에, 다른 기기에서 열면
+// "Your network has changed or your access has been denied" 로 거부된다.
+// 카카오톡 앱 스캐너는 브라우저로 URL 을 여는 게 아니라 앱의 인증 채널로 토큰을 전달한다.
+// 링크만으로 승인이 되면 URL 을 가로챈 누구나 로그인할 수 있으므로, 막는 것이 옳은 설계다.
+// → 로그인을 쉽게 만드는 대신 '로그인 상태 유지'로 로그인 빈도를 줄이는 쪽으로 간다.
+
+/**
+ * QR 화면의 「로그인 상태 유지」 체크박스를 켠다.
+ * 기본값이 꺼짐이라 세션이 금방 만료된다. 스캔 전에 켜둬야 반영된다.
+ */
+async function ensureStaySignedIn(page) {
+  try {
+    return await page.evaluate(() => {
+      const box = document.querySelector('input[name="staySignedIn"], input[id^="staySignedIn"]');
+      if (!box) return false;
+      if (!box.checked) {
+        // 리액트 상태까지 반영되도록 라벨을 클릭한다 (checked 직접 대입은 무시될 수 있다)
+        const label = box.closest('label') ?? document.querySelector(`label[for="${box.id}"]`);
+        (label ?? box).click();
+      }
+      return document.querySelector('input[name="staySignedIn"], input[id^="staySignedIn"]')?.checked === true;
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function qrLogin({ notify = true } = {}) {
   const browser = await chromium.launch({ headless: true, executablePath: '/usr/bin/google-chrome' });
   // QR 을 또렷하게 찍기 위해 배율을 높인다 (폰 카메라 인식률)
@@ -61,15 +90,18 @@ export async function qrLogin({ notify = true } = {}) {
       if (!box) throw new Error('QR 코드를 찾지 못했습니다. 카카오 로그인 화면 구조가 바뀌었을 수 있습니다.');
       await box.screenshot({ path: SHOT });
 
+      const stayOn = await ensureStaySignedIn(page);
+
       if (notify) {
         await cleanup();
         const msg = await sendPhoto(SHOT,
           `🔐 <b>티스토리 로그인</b>\n\n` +
           `카카오톡 앱 → <b>더보기</b> → 우측 상단 <b>QR코드 스캔</b> 으로 이 코드를 찍어주세요.\n\n` +
           `· 유효시간 약 5분 (만료되면 새 코드를 다시 보냅니다)\n` +
+          `· <b>로그인 상태 유지</b> ${stayOn ? '켜짐 — 다음 로그인까지 오래 갑니다' : '설정 실패 (세션이 짧을 수 있습니다)'}\n` +
           `· 인증은 폰에서, 세션은 서버에 저장됩니다`);
         sentMsgId = msg.message_id;
-        log.info(`QR 전송 (${round + 1}/${ROUNDS})`);
+        log.info(`QR 전송 (${round + 1}/${ROUNDS}) · 로그인상태유지=${stayOn}`);
       } else {
         log.info(`QR 저장: ${SHOT}`);
       }

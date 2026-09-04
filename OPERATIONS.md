@@ -81,7 +81,21 @@ node scripts/tistory-posts.mjs delete 12         # 글 삭제
 
 ### 1. 티스토리 세션 (발행용)
 
-카카오 로그인 세션이라 **몇 주에 한 번 만료**됩니다. 만료되면 발행이 실패하고 텔레그램으로 알림이 옵니다.
+QR 로그인 시 **「로그인 상태 유지」를 자동으로 켭니다.** 이걸 켜지 않으면 핵심 쿠키
+(`TSSESSION`, `_kawlt` 등)가 만료 시각 없는 세션 쿠키로 발급돼 하루도 못 가고 죽습니다.
+
+| 쿠키 | 유지 OFF | 유지 ON |
+|---|---|---|
+| `TSSESSION` | 세션쿠키 (서버가 임의 만료) | **30일** |
+| `_kawlt` / `_kawltea` / `_kahai` | 세션쿠키 | **30일** |
+| `_kau` | 365일 | 365일 |
+
+따라서 **약 한 달에 한 번** 재로그인하면 됩니다. 만료되면 텔레그램으로 QR 이 자동으로 옵니다.
+
+> **QR 을 링크로 대체할 수 없습니다.** QR 은 `https://auth.kakao.com/qr_login/confirm?token=...`
+> 링크를 담고 있지만, 카카오가 토큰을 QR 을 생성한 브라우저의 세션·IP 에 묶어둡니다.
+> 다른 기기에서 열면 "Your network has changed or your access has been denied" 로 거부됩니다.
+> 링크만으로 승인되면 URL 을 가로챈 누구나 로그인할 수 있으므로 막는 것이 옳습니다. 시도하지 마세요.
 
 ```bash
 npm run session:login      # 브라우저가 열리면 직접 로그인
