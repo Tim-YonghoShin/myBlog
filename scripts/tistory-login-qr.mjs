@@ -53,7 +53,20 @@ async function ensureStaySignedIn(page) {
   }
 }
 
-export async function qrLogin({ notify = true } = {}) {
+// 동시 실행 방지 — 여러 경로(헬스체크·승인 훅·/login·에이전트)에서 호출되므로
+// 중복 실행되면 사용자에게 QR 이 여러 장 날아가고, 늦게 끝난 쪽이 좋은 세션을 덮어쓸 수 있다.
+let inFlight = null;
+
+export function qrLogin(opts = {}) {
+  if (inFlight) {
+    log.info('QR 로그인이 이미 진행 중입니다 — 기존 작업에 합류합니다');
+    return inFlight;
+  }
+  inFlight = qrLoginInner(opts).finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+async function qrLoginInner({ notify = true } = {}) {
   const browser = await chromium.launch({ headless: true, executablePath: '/usr/bin/google-chrome' });
   // QR 을 또렷하게 찍기 위해 배율을 높인다 (폰 카메라 인식률)
   const ctx = await browser.newContext({
@@ -132,6 +145,7 @@ export async function qrLogin({ notify = true } = {}) {
     }
 
     await cleanup();
+    // 실패 경로에서는 세션 파일을 건드리지 않는다. 기존 세션이 아직 유효할 수 있다.
     if (notify) await send('⏱ QR 코드가 모두 만료되었습니다. <code>/login</code> 으로 다시 시도하세요.');
     return { ok: false, reason: 'expired' };
   } catch (e) {
